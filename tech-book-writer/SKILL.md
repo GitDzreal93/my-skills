@@ -15,6 +15,45 @@ description: 专业技术书籍写作系统，支持多角色协同（主编、�
 - 🌍 **多语言支持**: 内置翻译角色，支持全书翻译
 - ✅ **质量保证**: 严格的校对流程，确保内容准确无误
 
+## 环境配置
+
+### 即梦AI 凭证配置（可选）
+
+如果需要使用即梦AI生成插图，需要配置火山引擎的访问凭证。提供三种配置方式（按优先级排序）：
+
+#### 方式1: 交互式配置（推荐）
+
+首次使用时运行 setup 命令：
+
+```bash
+python scripts/generate_ai_image.py --setup
+```
+
+按提示输入 ACCESS_KEY 和 SECRET_KEY，凭证将安全保存到 `~/.tech-book-writer/config.json`。
+
+**获取凭证地址**: https://console.volcengine.com/iam/keymanage/
+
+#### 方式2: 环境变量
+
+在 `~/.zshrc` 或 `~/.bashrc` 中添加：
+
+```bash
+export VOLCENGINE_ACCESS_KEY='your_access_key'
+export VOLCENGINE_SECRET_KEY='your_secret_key'
+```
+
+然后执行 `source ~/.zshrc` 或重启终端。
+
+#### 方式3: 命令行参数
+
+每次调用时手动传入：
+
+```bash
+python scripts/generate_ai_image.py --ak YOUR_AK --sk YOUR_SK ...
+```
+
+**注意**: 方式1和2配置后，后续使用时脚本会自动读取凭证，无需重复输入。
+
 ## 快速开始
 
 当用户提出以下需求时，立即使用本 Skill：
@@ -196,21 +235,30 @@ python scripts/html_to_image.py \
 
 ##### 类型4: AI生成插图（即梦AI API）⚠️
 
-**前提条件**: 用户必须提供火山引擎的 `ACCESS_KEY` 和 `SECRET_KEY`
+**前提条件**: 需要配置火山引擎访问凭证（见上方"环境配置"章节）
 
-**使用场景**: 
+**使用场景**:
 - 需要场景插图（如：数据中心、机器学习流程示意图）
 - 概念可视化（抽象概念的形象化表达）
 - 封面设计
 
-**调用方式**:
+**调用方式**（配置凭证后无需传入 AK/SK）:
 ```bash
+# 基础用法
 python scripts/generate_ai_image.py \
   --prompt "一个现代化的数据中心，服务器机架，蓝色光线，科技感" \
-  --ak "用户的ACCESS_KEY" \
-  --sk "用户的SECRET_KEY" \
   --output "data_center.jpg"
+
+# 自定义风格和尺寸
+python scripts/generate_ai_image.py \
+  --prompt "神经网络结构图，发光效果，科技风格" \
+  --style realistic \
+  --width 1200 \
+  --height 800 \
+  --output "neural_network.jpg"
 ```
+
+**支持的风格**: `realistic`（写实）、`anime`（动漫）、`oil_painting`（油画）、`sketch`（素描）、`cartoon`（卡通）
 
 **使用原则**:
 - 🔴 **尽量少用**：优先使用 Mermaid、Echart 等结构化图表
@@ -388,6 +436,90 @@ python scripts/validate_code.py \
 
 ---
 
+### 阶段5: 生成总结卡片（可选）
+
+**美工角色 + 主编角色**
+
+为完成的章节添加技术文章总结卡片，方便读者快速回顾和分享。
+
+#### 触发方式
+
+总结卡片**默认不自动生成**，需要用户主动触发：
+
+```markdown
+用户提示词示例：
+- "为第1章生成总结卡片"
+- "添加文章总结组件"
+- "帮我生成分享卡片"
+```
+
+#### 生成方式
+
+使用脚本自动生成并插入到文章末尾：
+
+```bash
+# 基础用法
+python scripts/generate_share_card.py \
+  --input "chapters/chapter01.md"
+
+# 指定分享链接
+python scripts/generate_share_card.py \
+  --input "chapters/chapter01.md" \
+  --share-url "https://your-book.com/chapter01"
+
+# 预览卡片（不写入文件）
+python scripts/generate_share_card.py \
+  --input "chapters/chapter01.md" \
+  --preview
+
+# 更新已有卡片的分享链接
+python scripts/generate_share_card.py \
+  --input "chapters/chapter01.md" \
+  --share-url "https://your-book.com/chapter01" \
+  --update
+```
+
+#### 卡片功能
+
+脚本会自动分析文章内容，提取：
+- 📌 **文章标题**：从第一个 # 标题提取
+- 📝 **文章摘要**：自动生成简短摘要
+- 💡 **核心要点**：提取 3-5 条关键内容（加粗文本、列表项）
+- 🏷️ **技术标签**：识别技术关键词
+- 📅 **发布日期**：自动添加当前日期
+
+#### 卡片样式
+
+- 清新技术风格（蓝紫渐变配色）
+- 圆角卡片 + 柔和阴影
+- 编号要点列表
+- 响应式设计（完美适配 PC 和移动端）
+- 纯 HTML + CSS，支持在 Markdown 渲染器中显示
+
+#### 功能按钮
+
+- **复制链接**：点击按钮复制文章链接到剪贴板
+- **导出图片**：
+  - 方式1：使用系统截图工具（Mac: Cmd+Shift+4，Windows: Win+Shift+S）
+  - 方式2：安装 html2canvas 库后可一键导出
+
+#### 分享链接配置
+
+默认使用占位符链接，用户可以通过以下方式修改：
+
+**方式1**: 运行脚本时指定 `--share-url`
+
+**方式2**: 发送链接给 AI，AI 帮你更新
+```markdown
+用户: "分享链接是 https://example.com/ch01，帮我更新"
+
+AI: 执行脚本更新卡片链接...
+```
+
+**方式3**: 手动编辑文章，查找 `copyArticleLink` 函数并修改链接
+
+---
+
 ## 项目结构
 
 完整的书籍项目结构：
@@ -439,11 +571,12 @@ python scripts/validate_code.py \
 | `generate_xmind.py` | Markdown转XMind思维导图 | 见下方示例 |
 | `generate_echart.py` | 生成Echart可视化图表 | 见下方示例 |
 | `html_to_image.py` | HTML转图片（JPG/PNG） | 见下方示例 |
-| `generate_ai_image.py` | 调用即梦AI生成插图 | 需要AK/SK |
+| `generate_ai_image.py` | 调用即梦AI生成插图 | 见"环境配置"章节 |
 | `proofreading.py` | 全书质量校对 | 自动化检查 |
 | `validate_code.py` | 验证代码示例可运行性 | 支持多语言 |
 | `translate_book.py` | 全书翻译 | 支持多目标语言 |
 | `generate_pdf.py` | 导出PDF格式电子书 | 见 [export-guide.md](export-guide.md) |
+| `generate_share_card.py` | 生成技术文章总结卡片 | 见"阶段5: 生成总结卡片" |
 
 **快速查看脚本使用方法**:
 ```bash
@@ -502,7 +635,7 @@ python scripts/{脚本名}.py --help
    - 算法流程 → Mermaid流程图
    - 性能对比 → Echart柱状图
    - 概念关系 → 思维导图
-   - 场景示意 → （如果用户提供AK/SK）即梦AI
+   - 场景示意 → （如果已配置凭证）即梦AI
 4. 插入图片引用到章节
 5. 输出图片到 images/chapter03/
 ```
@@ -580,23 +713,79 @@ python scripts/{脚本名}.py --help
 - 关键步骤必须注释
 - 提供实际运行结果
 
-### Q3: 什么时候使用AI生成插图？
+### Q3: 如何配置即梦AI的访问凭证？
+首次使用前运行交互式配置：
+```bash
+python scripts/generate_ai_image.py --setup
+```
+按提示输入 ACCESS_KEY 和 SECRET_KEY（从 https://console.volcengine.com/iam/keymanage/ 获取）。
+
+或者设置环境变量：
+```bash
+export VOLCENGINE_ACCESS_KEY='your_ak'
+export VOLCENGINE_SECRET_KEY='your_sk'
+```
+
+### Q4: 什么时候使用AI生成插图？
 - 需要场景化插图时
 - 抽象概念需要可视化时
-- **前提**: 用户提供了 AK/SK
+- **前提**: 已配置访问凭证
 - **原则**: 优先使用结构化图表
 
-### Q4: 如何保证翻译质量？
+### Q5: 如何保证翻译质量？
 - 使用术语表保持一致性
 - 技术术语优先保留英文
 - 翻译后运行校对脚本
 - 代码注释翻译但代码本身不变
 
-### Q5: 校对报告发现问题怎么办？
+### Q6: 校对报告发现问题怎么办？
 1. 查看具体问题描述
 2. 修改对应章节
 3. 重新运行校对
 4. 直到全部通过
+
+### Q7: 如何为文章添加总结卡片？
+
+总结卡片默认不自动生成，需要主动触发：
+
+**触发方式**：
+```markdown
+"为第1章生成总结卡片"
+"添加文章总结组件"
+"帮我生成分享卡片"
+```
+
+**使用脚本生成**：
+```bash
+# 生成卡片（自动插入文章末尾）
+python scripts/generate_share_card.py --input chapters/chapter01.md
+
+# 指定分享链接
+python scripts/generate_share_card.py \
+  --input chapters/chapter01.md \
+  --share-url "https://your-book.com/chapter01"
+```
+
+**卡片功能**：
+- 复制链接：点击按钮复制文章链接
+- 导出图片：使用截图工具或安装 html2canvas 库
+
+**更新分享链接**：
+```bash
+# 方式1: 使用脚本更新
+python scripts/generate_share_card.py \
+  --input chapters/chapter01.md \
+  --share-url "NEW_URL" \
+  --update
+
+# 方式2: 发送链接给AI，AI帮你更新
+```
+
+卡片会自动提取：
+- 文章标题和摘要
+- 3-5条核心要点（编号列表）
+- 技术标签
+- 发布日期
 
 ---
 
