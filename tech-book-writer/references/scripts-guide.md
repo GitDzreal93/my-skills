@@ -139,31 +139,75 @@ python scripts/html_to_image.py \
 ## 4. generate_ai_image.py - AI插图生成
 
 ### 功能
-调用火山引擎即梦AI生成插图。
+调用火山引擎即梦AI生成插图（使用Visual Service API）。
 
-### 前提条件
-用户必须提供：
-- ACCESS_KEY
-- SECRET_KEY
+### 前置准备
+
+**安装依赖**:
+```bash
+pip install volcengine
+```
+
+**配置AK/SK**:
+```bash
+# 方式1: 交互式配置（推荐）
+python scripts/generate_ai_image.py --setup
+
+# 方式2: 设置环境变量
+export VOLCENGINE_AK="your_access_key"
+export VOLCENGINE_SK="your_secret_key"
+
+# 方式3: 使用命令行参数（每次都需要指定）
+```
 
 ### 使用方法
+
+**基础用法**（使用环境变量中的AK/SK）:
 ```bash
 python scripts/generate_ai_image.py \
   --prompt "一个现代化的数据中心，蓝色科技光线" \
+  --output "data_center.png"
+```
+
+**使用命令行参数指定AK/SK**:
+```bash
+python scripts/generate_ai_image.py \
+  --prompt "山水画风格，中国传统文化" \
   --ak "YOUR_ACCESS_KEY" \
   --sk "YOUR_SECRET_KEY" \
-  --output "data_center.jpg" \
-  --style "realistic"
+  --output "landscape.png"
+```
+
+**高级用法**:
+```bash
+# 使用固定种子生成相似图片
+python scripts/generate_ai_image.py \
+  --prompt "一只可爱的猫" \
+  --output "cat.png" \
+  --seed 12345
+
+# 关闭文本扩写（适合长prompt）
+python scripts/generate_ai_image.py \
+  --prompt "水彩画风格，柔和光影，一只橘猫在窗台上晒太阳..." \
+  --output "cat.png" \
+  --no-pre-llm
+
+# 调整文本描述权重
+python scripts/generate_ai_image.py \
+  --prompt "机器学习流程示意图" \
+  --output "ml_diagram.png" \
+  --scale 5.0
 ```
 
 ### 参数说明
-- `--prompt`: 图片描述（中文或英文）
-- `--ak`: 火山引擎ACCESS_KEY
-- `--sk`: 火山引擎SECRET_KEY
-- `--output`: 输出图片路径
-- `--style`: 风格（realistic/anime/oil_painting等）
-- `--width`: 图片宽度（默认1024）
-- `--height`: 图片高度（默认1024）
+- `--prompt`: 图片描述（中文或英文，支持自然语言）
+- `--output`: 输出图片路径（必需）
+- `--ak`: 火山引擎Access Key（可选，优先级高于环境变量）
+- `--sk`: 火山引擎Secret Key（可选，需要与--ak一起使用）
+- `--no-pre-llm`: 关闭文本扩写（适合详细的长prompt）
+- `--seed`: 随机种子（-1表示随机，相同种子生成相似图片）
+- `--scale`: 文本描述权重（1.0-10.0，默认2.5，越高越遵循prompt）
+- `--setup`: 交互式配置AK/SK
 
 ### 提示词建议
 
