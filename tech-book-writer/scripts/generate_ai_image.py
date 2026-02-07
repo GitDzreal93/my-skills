@@ -10,9 +10,9 @@ API文档: https://www.volcengine.com/docs/85621/1817045
 - req_key: jimeng_t2i_v40
 
 配置方式（按优先级排序）:
-1. 命令行参数 --ak --sk
-2. 环境变量 VOLCENGINE_AK / VOLCENGINE_SK
-3. 配置文件 ~/.tech-book-writer/config.json
+1. 环境变量 VOLCENGINE_AK / VOLCENGINE_SK（推荐）
+2. 配置文件 ~/.tech-book-writer/config.json
+3. 命令行参数 --ak --sk（会自动更新环境变量）
 """
 
 import argparse
@@ -77,12 +77,28 @@ export VOLCENGINE_SK="{sk}"
 
         # 检查是否已经配置过
         if 'VOLCENGINE_AK' in existing_content:
-            print(f"⚠️  {config_path} 中已存在 VOLCENGINE_AK 配置")
-            return False
+            # 更新现有配置（移除旧的，添加新的）
+            import re
+            # 移除旧的 VOLCENGINE_AK 和 VOLCENGINE_SK 行
+            lines = existing_content.split('\n')
+            filtered_lines = []
+            skip_next = False
+            for i, line in enumerate(lines):
+                if 'VOLCENGINE_AK' in line or 'VOLCENGINE_SK' in line or (
+                    skip_next and ('火山引擎即梦AI' in line or line.strip() == '')
+                ):
+                    skip_next = False
+                    continue
+                filtered_lines.append(line)
 
-        # 追加配置
-        with open(config_path, 'a') as f:
-            f.write(export_lines)
+            # 写入更新后的内容
+            with open(config_path, 'w') as f:
+                f.write('\n'.join(filtered_lines))
+                f.write(export_lines)
+        else:
+            # 追加配置
+            with open(config_path, 'a') as f:
+                f.write(export_lines)
 
         return True
     except Exception as e:
@@ -384,9 +400,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f'''
 配置方式（按优先级）:
-  1. 命令行参数 --ak --sk
-  2. 环境变量 VOLCENGINE_AK / VOLCENGINE_SK
-  3. 配置文件 ~/.tech-book-writer/config.json
+  1. 环境变量 VOLCENGINE_AK / VOLCENGINE_SK（推荐）
+  2. 配置文件 ~/.tech-book-writer/config.json
+  3. 命令行参数 --ak --sk（会自动更新环境变量）
 
 获取AK/SK: https://console.volcengine.com/iam/keymanage
 
@@ -449,33 +465,47 @@ API文档: https://www.volcengine.com/docs/85621/1817045
         print("❌ 错误: --prompt 和 --output 是必需参数")
         print()
         print("💡 首次使用请先配置AK/SK:")
-        print("   python generate_ai_image.py --setup")
-        print()
-        print("   或设置环境变量:")
         print("   export VOLCENGINE_AK='your_ak'")
         print("   export VOLCENGINE_SK='your_sk'")
+        print()
+        print("   或使用交互式配置:")
+        print("   python generate_ai_image.py --setup")
         sys.exit(1)
 
-    # 获取AK/SK（命令行参数 > 环境变量 > 配置文件）
-    ak, sk = args.ak, args.sk
-
-    if not ak or not sk:
-        ak, sk = get_credentials_from_env()
+    # 获取AK/SK（优先：环境变量 > 配置文件 > 命令行参数）
+    # 命令行参数会自动更新到环境变量
+    ak, sk = get_credentials_from_env()
 
     if not ak or not sk:
         ak, sk = get_credentials_from_config()
+
+    if not ak or not sk:
+        ak, sk = args.ak, args.sk
+
+    # 如果用户通过命令行参数提供了ak/sk，更新环境变量
+    if args.ak and args.sk:
+        print(f"📝 检测到通过命令行参数提供AK/SK，正在更新环境变量...")
+        shell_config_path = get_shell_config_path()
+        if save_to_shell_config(ak, sk):
+            print(f"✅ 已更新环境变量配置: {shell_config_path}")
+            print(f"💡 请运行以下命令使配置生效:")
+            print(f"   source {shell_config_path}")
+            print()
+        # 同时更新当前进程的环境变量
+        os.environ['VOLCENGINE_AK'] = ak
+        os.environ['VOLCENGINE_SK'] = sk
 
     if not ak or not sk:
         print("❌ 错误: 未找到 AK/SK")
         print()
         print("💡 请通过以下方式配置（任选一种）:")
         print()
-        print("   方式1: 交互式配置（推荐）")
-        print("   python generate_ai_image.py --setup")
-        print()
-        print("   方式2: 设置环境变量")
+        print("   方式1: 设置环境变量（推荐）")
         print("   export VOLCENGINE_AK='your_ak'")
         print("   export VOLCENGINE_SK='your_sk'")
+        print()
+        print("   方式2: 交互式配置")
+        print("   python generate_ai_image.py --setup")
         print()
         print("   方式3: 使用命令行参数")
         print("   python generate_ai_image.py --ak YOUR_AK --sk YOUR_SK ...")
