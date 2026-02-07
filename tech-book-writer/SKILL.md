@@ -14,6 +14,7 @@ description: 专业技术书籍写作系统，支持多角色协同（主编、�
 - 🎨 **多样化插图**: Mermaid流程图、XMind思维导图、Echart可视化、AI生成插图
 - 🌍 **多语言支持**: 内置翻译角色，支持全书翻译
 - ✅ **质量保证**: 严格的校对流程，确保内容准确无误
+- 📁 **规范化结构**: 严格的目录组织和素材管理规范
 
 ## 环境配置
 
@@ -112,9 +113,9 @@ python scripts/generate_ai_image.py --ak YOUR_AK --sk YOUR_SK ...
 
 #### 主编：章节内容编写
 
-**⚠️ 重要原则：严格遵循大纲**
+**⚠️ 重要原则：严格遵循大纲 + 规范化目录结构**
 
-在开始写作前，必须回顾已审核通过的书籍大纲，确保：
+在开始写作前，必须：
 
 1. **严格按照大纲的章节规划写作**
    - 每章的标题必须与大纲一致
@@ -127,11 +128,21 @@ python scripts/generate_ai_image.py --ak YOUR_AK --sk YOUR_SK ...
    - 发现偏离时立即调整，回归大纲规划
    - 如需调整大纲，必须先与用户确认
 
-3. **避免常见问题**
+3. **⚠️ 严格按照目录结构组织素材（最重要！）**
+   - 所有图片必须存放到 `assets/chapterXX/images/` 目录
+   - 所有代码必须存放到 `assets/chapterXX/code/` 目录
+   - 所有HTML/图表必须存放到 `assets/chapterXX/html/` 目录
+   - 所有数据文件必须存放到 `assets/chapterXX/data/` 目录
+   - **禁止**将图片散落在chapters目录或项目根目录
+   - **禁止**随意命名图片文件，必须遵循命名规范
+
+4. **避免常见问题**
    - ❌ **随意扩展**：在大纲之外增加大量内容
    - ❌ **偏离主题**：写作时忘记大纲规划的主题
    - ❌ **结构混乱**：不按照大纲的章节顺序写作
+   - ❌ **素材散落**：图片、代码随意存放，不按目录组织
    - ✅ **紧扣大纲**：每章内容都是大纲的精确实现
+   - ✅ **规范目录**：所有素材按章节分类存放
 
 按照规范模板编写每章内容：
 
@@ -258,39 +269,75 @@ python scripts/html_to_image.py \
 - 散点图（scatter）：数据分布
 - 雷达图（radar）：多维度评估
 
-##### 类型4: AI生成插图（即梦AI API）⚠️
+##### 类型4: AI生成插图（即梦AI API）⭐
 
 **前提条件**: 需要配置火山引擎访问凭证（见上方"环境配置"章节）
 
 **使用场景**:
-- 需要场景插图（如：数据中心、机器学习流程示意图）
-- 概念可视化（抽象概念的形象化表达）
-- 封面设计
+- 章节封面插图（每章一张16:9横版配图）
+- 概念场景可视化（将抽象概念转化为直观场景）
+- 技术场景营造（营造与章节主题相符的氛围）
 
-**调用方式**（配置凭证后无需传入 AK/SK）:
+**⚠️ 重要规范：16:9横版风格 + 专业提示词**
+
+所有AI生成的插图必须遵循以下规范：
+
+1. **尺寸规范**：
+   - **推荐使用 16:9 横版**（横版宽幅）
+   - 2K尺寸：2560x1440（推荐，速度较快）
+   - 4K尺寸：5404x3040（高清，文件较大）
+   - 使用 `--preset "16:9" --size 2k` 参数
+
+2. **提示词风格**：
+   采用极简低饱和度专业风格，参考模板：
+   ```
+   极简[主题]山水，浅[色系1]浅[色系2]低饱和色系，远山淡墨晕染，
+   云雾如纱缠绕山峦，[具体场景细节]，留白充足，
+   水墨写意质感，空灵静谧，[意境/哲学]意境，
+   横版宽幅，高清细节
+   ```
+
+3. **根据章节主题定制**：
+   - 机器学习：现代科技山水，浅蓝浅灰，神经网络山峰，数据流动云雾
+   - 编程语言：代码竹林，浅绿浅青，函数枝桡，算法溪流，逻辑意境
+   - 数据库：数据湖景，浅蓝浅紫，信息岛屿，查询波光，存储意境
+   - 网络安全：守护山脉，浅金浅灰，防护城墙，加密云雾，安全意境
+   - 云原生：云端梯田，浅白浅蓝，容器方格，服务流水，弹性意境
+
+**调用示例**：
 ```bash
-# 基础用法
+# 机器学习章节封面（推荐：16:9横版2K）
 python scripts/generate_ai_image.py \
-  --prompt "一个现代化的数据中心，服务器机架，蓝色光线，科技感" \
-  --output "data_center.jpg"
+  --prompt "极简机器学习山水，浅蓝浅灰低饱和色系，远山淡墨晕染，云雾如纱缠绕山峦，山脚下神经网络如树般生长，数据流如溪水穿过山谷，留白充足，水墨写意质感，空灵静谧，智能意境，横版宽幅，高清细节" \
+  --preset "16:9" --size 2k \
+  --output "assets/chapter01/images/01_cover_ml.jpg"
 
-# 自定义风格和尺寸
+# 编程语言章节封面
 python scripts/generate_ai_image.py \
-  --prompt "神经网络结构图，发光效果，科技风格" \
-  --style realistic \
-  --width 1200 \
-  --height 800 \
-  --output "neural_network.jpg"
+  --prompt "极简代码竹林，浅绿浅青低饱和色系，远山淡墨晕染，云雾如纱缠绕竹林，函数枝桡向上生长，算法溪流穿过竹林，留白充足，水墨写意质感，空灵静谧，逻辑意境，横版宽幅，高清细节" \
+  --preset "16:9" --size 2k \
+  --output "assets/chapter02/images/01_cover_coding.jpg"
+
+# 自定义尺寸（4K 16:9）
+python scripts/generate_ai_image.py \
+  --prompt "山水画" \
+  --width 5404 --height 3040 \
+  --output "custom.jpg"
 ```
 
-**支持的风格**: `realistic`（写实）、`anime`（动漫）、`oil_painting`（油画）、`sketch`（素描）、`cartoon`（卡通）
+**图片存放路径**（必须遵守）：
+```
+assets/chapterXX/images/
+├── 01_cover_[主题].jpg           # 章节封面（16:9横版2560x1440）
+├── 02_scene_[概念].jpg           # 场景插图
+└── README.md                     # 图片说明文档
+```
 
 **使用原则**:
-- 🔴 **尽量少用**：优先使用 Mermaid、Echart 等结构化图表
-- 🟡 **明确提示词**：提供详细的场景描述
-- 🟢 **用户确认**：生成后让用户确认是否满意
-
-**API文档**: https://www.volcengine.com/docs/85621/1537648?lang=zh
+- 🟢 **章节封面**：每章生成一张16:9横版封面
+- 🟡 **场景配图**：重要概念可添加场景可视化
+- 🔴 **控制数量**：不要过度使用，保持书籍专业感
+- ✅ **用户确认**：生成后必须让用户确认效果
 
 ##### 类型5: 表格对比（Markdown）
 
@@ -545,7 +592,9 @@ AI: 执行脚本更新卡片链接...
 
 ---
 
-## 项目结构
+## 项目结构（重要！）
+
+⚠️ **这是最重要的部分！严格遵循以下目录结构。**
 
 完整的书籍项目结构：
 
@@ -554,33 +603,42 @@ AI: 执行脚本更新卡片链接...
 ├── README.md                    # 书籍介绍
 ├── 书籍大纲.md                  # 完整大纲（用户审核通过后锁定）
 ├── 写作规范.md                  # 写作标准（可选）
-├── chapters/                    # 章节内容（Markdown格式）
+├── chapters/                    # ✅ 章节内容（仅Markdown文件）
 │   ├── chapter01.md
 │   ├── chapter02.md
 │   └── ...
-├── assets/                      # 📁 所有素材资源（按章节组织）
+├── assets/                      # 📁 所有素材资源（严格按章节组织）
+│   │
 │   ├── chapter01/               # 第1章的所有素材
-│   │   ├── images/             # 图片资源
-│   │   │   ├── 01_flowchart_xxx.png        # 流程图
-│   │   │   ├── 01_echart_xxx.jpg           # 数据图表
-│   │   │   ├── 01_ai_concept.jpg           # AI生成插图
-│   │   │   └── README.md                   # 图片说明文档
-│   │   ├── code/               # 可运行的代码示例
+│   │   ├── images/             # 📷 图片资源目录
+│   │   │   ├── 01_cover_ml.jpg                  # 章节封面（16:9横版2560x1440）
+│   │   │   ├── 02_flowchart_ml_workflow.png     # Mermaid流程图
+│   │   │   ├── 03_echart_performance.jpg        # Echart图表
+│   │   │   ├── 04_scene_concept.jpg             # AI场景插图
+│   │   │   └── README.md                          # 图片说明文档
+│   │   │
+│   │   ├── code/               # 💻 可运行的代码示例
 │   │   │   ├── example01_linear_regression.py
 │   │   │   ├── example02_data_processing.py
-│   │   │   └── README.md                   # 代码使用说明
-│   │   ├── html/               # HTML/图表资源
-│   │   │   ├── chart01_performance.html    # Echart图表HTML
+│   │   │   └── README.md                          # 代码使用说明
+│   │   │
+│   │   ├── html/               # 🌐 HTML/图表资源
+│   │   │   ├── chart01_performance.html          # Echart图表源文件
+│   │   │   ├── chart01_performance.jpg           # 导出的JPG图片
 │   │   │   └── README.md
-│   │   └── data/               # 数据文件
+│   │   │
+│   │   └── data/               # 📊 数据文件
 │   │       ├── training_data.csv
 │   │       └── config.json
+│   │
 │   ├── chapter02/               # 第2章的所有素材
 │   │   ├── images/
 │   │   ├── code/
 │   │   ├── html/
 │   │   └── data/
+│   │
 │   └── ...
+│
 ├── tests/                       # 测试题
 │   ├── chapter01_test.md
 │   ├── chapter01_answer.md
@@ -596,6 +654,40 @@ AI: 执行脚本更新卡片链接...
 └── reports/                     # 质量报告
     ├── 校对报告.md
     └── 进度跟踪.md
+```
+
+### ⚠️⚠️⚠️ 目录结构规范（必须遵守）
+
+**铁律1: chapters目录只存放Markdown文件**
+- ✅ `chapters/chapter01.md` - 章节内容
+- ❌ `chapters/image01.png` - 禁止！图片必须放assets目录
+- ❌ `chapters/code.py` - 禁止！代码必须放assets目录
+
+**铁律2: 所有素材必须按章节分类**
+- ✅ `assets/chapter01/images/xxx.png` - 正确
+- ❌ `assets/images/xxx.png` - 错误！没有按章节组织
+- ❌ `images/xxx.png` - 错误！应该在assets目录下
+
+**铁律3: 素材必须分类存放**
+- 图片 → `assets/chapterXX/images/`
+- 代码 → `assets/chapterXX/code/`
+- HTML → `assets/chapterXX/html/`
+- 数据 → `assets/chapterXX/data/`
+
+**铁律4: 命名必须规范**
+```
+{章节号}_{类型序号}_{描述}.{扩展名}
+
+示例：
+✅ 01_cover_ml.jpg              # 第1章封面
+✅ 01_flowchart_workflow.png    # 第1章第1个流程图
+✅ 01_echart_performance.jpg   # 第1章第1个图表
+✅ 01_example01_lr.py          # 第1章第1个代码示例
+✅ 01_chart01_data.html        # 第1章第1个HTML图表
+
+❌ cover.jpg                    # 缺少章节号
+❌ ml_flowchart.png            # 缺少序号
+❌ image001.png                # 无意义命名
 ```
 
 ### ⚠️ 素材存放规则

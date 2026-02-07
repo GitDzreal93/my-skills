@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-调用火山引擎即梦AI生成插图（Visual Service API）
+调用火山引擎即梦AI 4.0生成插图
 
-API文档: https://www.volcengine.com/docs/85128/1526761
+API文档: https://www.volcengine.com/docs/85621/1817045
+
+新版即梦AI 4.0特性：
+- 支持自定义图片尺寸（包括16:9横版）
+- 异步任务模式（提交任务 → 查询结果）
+- req_key: jimeng_t2i_v40
 
 配置方式（按优先级排序）:
 1. 命令行参数 --ak --sk
@@ -14,6 +19,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import base64
 from pathlib import Path
 
@@ -87,13 +93,13 @@ export VOLCENGINE_SK="{sk}"
 def setup_credentials():
     """交互式配置AK/SK"""
     print("=" * 60)
-    print("火山引擎即梦AI AK/SK 配置")
+    print("火山引擎即梦AI 4.0 AK/SK 配置")
     print("=" * 60)
     print()
     print("请访问以下地址获取您的 AK/SK:")
     print("https://console.volcengine.com/iam/keymanage")
     print()
-    print("说明: 即梦AI使用火山引擎Visual Service，需要AK/SK认证")
+    print("说明: 即梦AI 4.0 支持自定义图片尺寸（包括16:9横版）")
     print()
 
     ak = input("请输入 Access Key (AK): ").strip()
@@ -144,8 +150,8 @@ def setup_credentials():
     return True
 
 
-class JimengAIClient:
-    """即梦AI客户端（使用Visual Service API）"""
+class JimengAI40Client:
+    """即梦AI 4.0客户端（异步API）"""
 
     def __init__(self, ak, sk):
         """
@@ -160,44 +166,51 @@ class JimengAIClient:
         self.client = VisualService()
         self.client.set_ak(ak)
         self.client.set_sk(sk)
-        self.req_key = "high_aes_general_v30l_zt2i"  # 通用3.0文生图
+        self.req_key = "jimeng_t2i_v40"  # 即梦AI 4.0
 
-    def generate_image(self, prompt, use_pre_llm=True, seed=-1, scale=2.5):
+    def submit_task(self, prompt, width=None, height=None, scale=0.5, force_single=True):
         """
-        生成图片
+        提交图片生成任务
 
         Args:
-            prompt: 图片描述（中英文均可）
-            use_pre_llm: 是否开启文本扩写（短prompt建议开启）
-            seed: 随机种子，-1表示随机
-            scale: 影响文本描述的程度 (1-10)
+            prompt: 图片描述（中英文均可，最长800字符）
+            width: 图片宽度（与height同时传入才生效）
+            height: 图片高度（与width同时传入才生效）
+            scale: 文本描述权重 (0-1，默认0.5)
+            force_single: 是否强制生成单图（默认True）
 
         Returns:
-            dict: API响应，包含base64编码的图片数据
+            str: 任务ID，失败返回None
         """
         form = {
             "req_key": self.req_key,
             "prompt": prompt,
-            "use_pre_llm": use_pre_llm,
-            "seed": seed,
             "scale": scale,
+            "force_single": force_single,
         }
 
+        # 添加尺寸参数（必须同时传入width和height）
+        if width and height:
+            form["width"] = width
+            form["height"] = height
+            print(f"   尺寸: {width}x{height} ({width/height:.2f}:1)")
+
         try:
-            print(f"🎨 正在生成图片...")
+            print(f"🎨 正在提交任务...")
             print(f"   算法: {self.req_key}")
             print(f"   提示词: {prompt}")
-            print(f"   文本扩写: {'开启' if use_pre_llm else '关闭'}")
-            print(f"   随机种子: {seed}")
             print(f"   文本权重: {scale}")
+            print(f"   强制单图: {force_single}")
 
-            resp = self.client.cv_process(form)
+            # 使用异步提交接口
+            resp = self.client.cv_sync2async_submit_task(form)
 
-            if resp.get('code') == 10000:
-                print(f"✅ 图片生成成功")
-                return resp
+            if resp.get('code') == 10000 and 'data' in resp:
+                task_id = resp['data'].get('task_id')
+                print(f"✅ 任务已提交: {task_id}")
+                return task_id
             else:
-                print(f"❌ API返回错误: {resp.get('message', 'Unknown error')}")
+                print(f"❌ 提交任务失败: {resp.get('message', 'Unknown error')}")
                 print(f"   响应详情: {resp}")
                 return None
 
@@ -206,6 +219,81 @@ class JimengAIClient:
             import traceback
             traceback.print_exc()
             return None
+
+    def get_result(self, task_id, retry_interval=3, max_wait=120):
+        """
+        查询任务结果
+
+        Args:
+            task_id: 任务ID
+            retry_interval: 重试间隔（秒）
+            max_wait: 最大等待时间（秒）
+
+        Returns:
+            dict: API响应，包含base64编码的图片数据
+        """
+        start_time = time.time()
+
+        while time.time() - start_time < max_wait:
+            try:
+                form = {
+                    "req_key": self.req_key,
+                    "task_id": task_id,
+                }
+
+                resp = self.client.cv_sync2async_get_result(form)
+
+                if resp.get('code') == 10000 and 'data' in resp:
+                    data = resp['data']
+                    status = data.get('status')
+
+                    if status == 'done':
+                        print(f"✅ 任务完成")
+                        return resp
+                    elif status in ['in_queue', 'generating']:
+                        elapsed = int(time.time() - start_time)
+                        print(f"⏳ 任务处理中... ({elapsed}s)", end='\r')
+                        time.sleep(retry_interval)
+                    else:
+                        print(f"\n❌ 任务状态异常: {status}")
+                        return None
+                else:
+                    print(f"\n❌ 查询失败: {resp.get('message', 'Unknown error')}")
+                    return None
+
+            except Exception as e:
+                print(f"\n❌ 查询异常: {e}")
+                import traceback
+                traceback.print_exc()
+                return None
+
+        print(f"\n❌ 超时: 任务未在 {max_wait} 秒内完成")
+        return None
+
+    def generate_image(self, prompt, width=None, height=None, scale=0.5, force_single=True, retry_interval=3, max_wait=120):
+        """
+        生成图片（提交任务 + 查询结果）
+
+        Args:
+            prompt: 图片描述
+            width: 图片宽度
+            height: 图片高度
+            scale: 文本权重
+            force_single: 强制单图
+            retry_interval: 查询重试间隔
+            max_wait: 最大等待时间
+
+        Returns:
+            dict: API响应
+        """
+        # 提交任务
+        task_id = self.submit_task(prompt, width, height, scale, force_single)
+        if not task_id:
+            return None
+
+        # 查询结果
+        resp = self.get_result(task_id, retry_interval, max_wait)
+        return resp
 
     def save_image(self, resp, output_path):
         """
@@ -224,25 +312,37 @@ class JimengAIClient:
                 return False
 
             data = resp['data']
-            if 'binary_data_base64' not in data or not data['binary_data_base64']:
-                print("❌ 响应中没有base64图片数据")
+
+            # 优先使用image_urls（如果配置了return_url）
+            if 'image_urls' in data and data['image_urls']:
+                import requests
+                img_url = data['image_urls'][0]
+                print(f"📥 下载图片: {img_url}")
+
+                response = requests.get(img_url, timeout=30)
+                if response.status_code == 200:
+                    img_data = response.content
+                else:
+                    print(f"⚠️  下载失败，尝试使用base64数据")
+                    raise Exception("Download failed")
+
+            # 使用base64数据
+            elif 'binary_data_base64' in data and data['binary_data_base64']:
+                img_base64 = data['binary_data_base64'][0]
+                img_data = base64.b64decode(img_base64)
+            else:
+                print("❌ 响应中没有图片数据")
                 return False
 
-            # 解码base64图片
-            img_base64 = data['binary_data_base64'][0]
-            img_data = base64.b64decode(img_base64)
-
             # 保存图片
+            output_path = Path(output_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
             with open(output_path, 'wb') as f:
                 f.write(img_data)
 
             print(f"✅ 图片已保存: {output_path}")
             print(f"   文件大小: {len(img_data)} 字节")
-
-            # 如果有扩展后的prompt，显示出来
-            if 'llm_result' in data and data['llm_result']:
-                print(f"\n📝 扩展后的提示词:")
-                print(f"   {data['llm_result']}")
 
             return True
 
@@ -254,10 +354,35 @@ class JimengAIClient:
 
 
 def main():
+    # 预设尺寸
+    PRESET_SIZES = {
+        '1:1': [
+            (1024, 1024, '1K正方形'),
+            (2048, 2048, '2K正方形'),
+            (4096, 4096, '4K正方形'),
+        ],
+        '4:3': [
+            (2304, 1728, '2K 4:3'),
+            (4694, 3520, '4K 4:3'),
+        ],
+        '3:2': [
+            (2496, 1664, '2K 3:2'),
+            (4992, 3328, '4K 3:2'),
+        ],
+        '16:9': [
+            (2560, 1440, '2K 16:9'),
+            (5404, 3040, '4K 16:9'),
+        ],
+        '21:9': [
+            (3024, 1296, '2K 21:9'),
+            (6198, 2656, '4K 21:9'),
+        ],
+    }
+
     parser = argparse.ArgumentParser(
-        description='使用火山引擎即梦AI生成插图',
+        description='使用火山引擎即梦AI 4.0生成插图（支持自定义尺寸）',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
+        epilog=f'''
 配置方式（按优先级）:
   1. 命令行参数 --ak --sk
   2. 环境变量 VOLCENGINE_AK / VOLCENGINE_SK
@@ -265,32 +390,49 @@ def main():
 
 获取AK/SK: https://console.volcengine.com/iam/keymanage
 
-首次使用请运行: python generate_ai_image.py --setup
+API文档: https://www.volcengine.com/docs/85621/1817045
+
+预设尺寸:
+  1:1   - 1024x1024, 2048x2048, 4096x4096 (正方形)
+  4:3   - 2304x1728, 4694x3520
+  3:2   - 2496x1664, 4992x3328
+  16:9  - 2560x1440, 5404x3040 (推荐横版)
+  21:9  - 3024x1296, 6198x2656
 
 示例:
   # 交互式配置
   python generate_ai_image.py --setup
 
-  # 使用环境变量中的AK/SK生成图片
-  python generate_ai_image.py --prompt "一只可爱的猫" --output cat.png
+  # 生成16:9横版图片（推荐）
+  python generate_ai_image.py --prompt "山水画" --output landscape.jpg --preset "16:9"
 
-  # 使用命令行参数指定AK/SK
-  python generate_ai_image.py --ak YOUR_AK --sk YOUR_SK --prompt "山水画" --output landscape.png
+  # 生成2K 16:9图片
+  python generate_ai_image.py --prompt "山水画" --output landscape.jpg --width 2560 --height 1440
 
-  # 关闭文本扩写（适合长prompt）
-  python generate_ai_image.py --prompt "详细的图片描述..." --output result.png --no-pre-llm
+  # 生成4K 16:9图片
+  python generate_ai_image.py --prompt "山水画" --output landscape.jpg --width 5404 --height 3040
+
+  # 使用预设尺寸
+  python generate_ai_image.py --prompt "机器学习" --output ml.jpg --preset "16:9" --size 2k
+
+  # 自定义尺寸
+  python generate_ai_image.py --prompt "代码" --output code.jpg --width 1920 --height 1080
         '''
     )
-    parser.add_argument('--prompt', help='图片描述（中文或英文）')
+    parser.add_argument('--prompt', help='图片描述（中文或英文，最长800字符）')
     parser.add_argument('--ak', help='火山引擎Access Key')
     parser.add_argument('--sk', help='火山引擎Secret Key')
     parser.add_argument('--output', help='输出图片路径')
-    parser.add_argument('--no-pre-llm', action='store_true',
-                        help='关闭文本扩写（适合长prompt）')
-    parser.add_argument('--seed', type=int, default=-1,
-                        help='随机种子（-1表示随机，相同种子生成相似图片）')
-    parser.add_argument('--scale', type=float, default=2.5,
-                        help='文本描述权重 (1.0-10.0，默认: 2.5)')
+    parser.add_argument('--width', type=int, help='图片宽度（与height同时使用）')
+    parser.add_argument('--height', type=int, help='图片高度（与width同时使用）')
+    parser.add_argument('--preset', choices=['1:1', '4:3', '3:2', '16:9', '21:9'],
+                        help='预设宽高比（推荐16:9）')
+    parser.add_argument('--size', choices=['1k', '2k', '4k'], default='2k',
+                        help='预设尺寸（与--preset配合使用，默认2k）')
+    parser.add_argument('--scale', type=float, default=0.5,
+                        help='文本描述权重 (0.0-1.0，默认: 0.5)')
+    parser.add_argument('--timeout', type=int, default=120,
+                        help='最大等待时间（秒，默认120）')
     parser.add_argument('--setup', action='store_true', help='交互式配置AK/SK')
 
     args = parser.parse_args()
@@ -341,15 +483,29 @@ def main():
         print("📖 获取AK/SK: https://console.volcengine.com/iam/keymanage")
         sys.exit(1)
 
+    # 确定图片尺寸
+    width, height = args.width, args.height
+
+    if args.preset:
+        # 使用预设尺寸
+        size_key = args.size.lower()
+        for w, h, desc in PRESET_SIZES[args.preset]:
+            if size_key in desc.lower():
+                width, height = w, h
+                print(f"📐 使用预设: {desc} ({w}x{h})")
+                break
+
     # 创建客户端
-    client = JimengAIClient(ak, sk)
+    client = JimengAI40Client(ak, sk)
 
     # 生成图片
     resp = client.generate_image(
         prompt=args.prompt,
-        use_pre_llm=not args.no_pre_llm,
-        seed=args.seed,
-        scale=args.scale
+        width=width,
+        height=height,
+        scale=args.scale,
+        force_single=True,
+        max_wait=args.timeout
     )
 
     if resp:
