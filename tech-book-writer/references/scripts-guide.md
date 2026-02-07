@@ -136,7 +136,77 @@ python scripts/html_to_image.py \
 
 ---
 
-## 4. generate_ai_image.py - AI插图生成
+## 4. generate_share_card.py - 技术文章总结卡片
+
+### 功能
+生成精美的技术文章总结卡片，支持：
+- 自动提取标题、摘要、核心要点、标签
+- 复制链接功能
+- 导出为PNG图片
+- 响应式设计，适配PC和移动端
+
+### 前置准备
+
+**安装依赖**（可选，用于导出图片）:
+```bash
+pip install playwright
+playwright install chromium
+```
+
+### 使用方法
+
+**生成独立HTML预览文件**（推荐）:
+```bash
+# 只生成卡片
+python scripts/generate_share_card.py \
+  --input chapter.md \
+  --html-output card.html
+
+# 包含文章内容
+python scripts/generate_share_card.py \
+  --input chapter.md \
+  --html-output card.html \
+  --include-article
+```
+
+**直接导出为PNG图片**:
+```bash
+python scripts/generate_share_card.py \
+  --input chapter.md \
+  --export-image card.png
+```
+
+**插入到Markdown文章**:
+```bash
+# 插入卡片到文章末尾
+python scripts/generate_share_card.py --input chapter.md
+
+# 预览卡片内容（不写入）
+python scripts/generate_share_card.py --input chapter.md --preview
+```
+
+### 功能说明
+
+生成的卡片包含：
+- 📌 文章标题和摘要
+- 💡 5个核心要点
+- 🏷️ 技术标签
+- 🔗 复制链接按钮
+- 📸 导出图片按钮（HTML预览模式）
+
+### 解决的问题
+
+**问题1**: Markdown中HTML显示不全
+- **解决方案**: 使用 `--html-output` 生成独立HTML文件
+
+**问题2**: 无法导出为图片
+- **解决方案**:
+  - 方式1: 在浏览器中打开HTML，点击"导出图片"按钮
+  - 方式2: 使用 `--export-image` 直接生成PNG
+
+---
+
+## 5. generate_ai_image.py - AI插图生成
 
 ### 功能
 调用火山引擎即梦AI生成插图（使用Visual Service API）。

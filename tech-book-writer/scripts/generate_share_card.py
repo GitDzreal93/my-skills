@@ -5,15 +5,20 @@
 功能：
 - 分析文章内容，提取关键信息
 - 生成精美的总结卡片HTML组件
-- 支持复制链接、导出图片功能
+- 生成独立的HTML预览文件
+- 支持导出为图片（使用Playwright）
 - 响应式设计，适配PC和移动端
 
 使用：
 python scripts/generate_share_card.py --input chapter.md --share-url "https://..."
+python scripts/generate_share_card.py --input chapter.md --html-output preview.html
+python scripts/generate_share_card.py --input chapter.md --export-image card.png
 """
 
 import argparse
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -113,6 +118,251 @@ def extract_tags(content):
                 tags.append(keyword)
 
     return tags[:8]
+
+
+def generate_full_html_page(title, summary, key_points, tags, share_url, article_content=""):
+    """生成完整的HTML页面（用于独立预览）"""
+
+    card_html = generate_share_card_html(title, summary, key_points, tags, share_url)
+
+    full_html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title} - 总结卡片</title>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+<body style="margin: 0; padding: 20px; background: #f5f5f5; min-height: 100vh;">
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <!-- 文章内容预览（可选） -->
+        {f'<div style="background: white; padding: 40px; border-radius: 16px; margin-bottom: 40px; box-shadow: 0 2px 12px rgba(0,0,0,0.08);"><article style="line-height: 1.8; color: #333;">{article_content}</article></div>' if article_content else ''}
+
+        <!-- 分享卡片 -->
+        {card_html}
+
+        <!-- 使用说明 -->
+        <div style="margin-top: 40px; padding: 20px; background: white; border-radius: 12px; border-left: 4px solid #2563EB;">
+            <h3 style="margin: 0 0 10px 0; color: #2563EB;">📖 使用说明</h3>
+            <ul style="margin: 0; padding-left: 20px; color: #666; line-height: 1.8;">
+                <li>点击"复制链接"按钮可复制文章链接</li>
+                <li>点击"导出图片"按钮可将卡片保存为PNG图片</li>
+                <li>也可以使用系统截图工具：<strong>Mac: Cmd+Shift+4</strong>，<strong>Windows: Win+Shift+S</strong></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 重写导出图片功能，使用html2canvas
+        function exportCardImage() {{
+            const card = document.getElementById('summaryCard');
+            const button = event.target.closest('.action-btn');
+
+            // 禁用按钮，显示加载状态
+            button.disabled = true;
+            button.innerHTML = '<svg class="spinner" width="18" height="18" viewBox="0 0 18 18" fill="none" style="animation: spin 1s linear infinite;"><circle cx="9" cy="9" r="7" stroke="currentColor" stroke-width="2" stroke-dasharray="14" stroke-dashoffset="7"></circle></svg><span>生成中...</span>';
+
+            html2canvas(card, {{
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                allowTaint: true,
+                onclone: function(clonedDoc) {{
+                    // 确保克隆的文档样式正确
+                    const clonedCard = clonedDoc.getElementById('summaryCard');
+                    if (clonedCard) {{
+                        clonedCard.style.transform = 'none';
+                        clonedCard.style.boxShadow = '0 8px 30px rgba(37, 99, 235, 0.12)';
+                    }}
+                }}
+            }}).then(canvas => {{
+                // 创建下载链接
+                const link = document.createElement('a');
+                link.download = '技术分享卡片.png';
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+
+                // 恢复按钮
+                button.disabled = false;
+                button.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3.75 14.25V3.75C3.75 3.33757 4.08757 3 4.5 3H13.5C13.9124 3 14.25 3.33757 14.25 3.75V14.25" stroke="currentColor" stroke-width="1.5"/><path d="M6 11.25L9 8.25L12 11.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 8.25V15.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>导出图片</span>';
+
+                showToast('导出成功！');
+            }}).catch(err => {{
+                console.error('导出失败:', err);
+                button.disabled = false;
+                button.innerHTML = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3.75 14.25V3.75C3.75 3.33757 4.08757 3 4.5 3H13.5C13.9124 3 14.25 3.33757 14.25 3.75V14.25" stroke="currentColor" stroke-width="1.5"/><path d="M6 11.25L9 8.25L12 11.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 8.25V15.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>导出图片</span>';
+                showFallbackGuide();
+            }});
+        }}
+
+        // 旋转动画
+        const style = document.createElement('style');
+        style.textContent = '@keyframes spin {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }} .spinner {{ animation: spin 1s linear infinite; }}';
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>'''
+    return full_html
+
+
+def convert_markdown_to_html(markdown_content):
+    """简单的Markdown转HTML（用于预览）"""
+    import re
+
+    html = markdown_content
+
+    # 标题
+    html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+
+    # 加粗
+    html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+
+    # 列表
+    html = re.sub(r'^[\-\*] (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+    html = re.sub(r'(<li>.+</li>\n?)+', r'<ul>\0</ul>', html)
+
+    # 段落
+    html = re.sub(r'\n\n+', '</p><p>', html)
+    html = '<p>' + html + '</p>'
+
+    # 清理空标签
+    html = re.sub(r'<p>\s*</p>', '', html)
+    html = re.sub(r'<p>(<h[1-6]>)', r'\1', html)
+    html = re.sub(r'(</h[1-6]>)</p>', r'\1', html)
+
+    return html
+
+
+def export_card_to_image(file_path, output_path, share_url=None):
+    """使用Playwright将卡片导出为图片"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("❌ 未安装 playwright，正在安装...")
+        subprocess.run(['pip', 'install', 'playwright'], check=True)
+        subprocess.run(['playwright', 'install', 'chromium'], check=True)
+        from playwright.sync_api import sync_playwright
+
+    file_path = Path(file_path)
+
+    # 读取文章内容
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 提取信息
+    title = extract_title(content)
+    summary = extract_summary(content)
+    key_points = extract_key_points(content)
+    tags = extract_tags(content)
+
+    if not share_url:
+        share_url = "https://your-book-url.com"
+
+    # 生成完整HTML页面
+    html_content = generate_full_html_page(title, summary, key_points, tags, share_url)
+
+    # 创建临时HTML文件
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+        f.write(html_content)
+        temp_html_path = f.name
+
+    try:
+        # 使用Playwright截图
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={'width': 1400, 'height': 1200})
+            page.goto(f'file://{temp_html_path}')
+
+            # 等待卡片加载
+            page.wait_for_selector('#summaryCard')
+
+            # 隐藏操作按钮和提示（用于截图）
+            page.evaluate('''
+                () => {
+                    // 隐藏操作按钮区域
+                    const actions = document.querySelector('.card-actions');
+                    if (actions) actions.style.display = 'none';
+
+                    // 隐藏分享提示
+                    const prompt = document.querySelector('.card-prompt');
+                    if (prompt) prompt.style.display = 'none';
+
+                    // 隐藏toast提示
+                    const toast = document.querySelector('.success-toast');
+                    if (toast) toast.style.display = 'none';
+                }
+            ''')
+
+            # 只截取卡片部分
+            card = page.locator('#summaryCard')
+            card.screenshot(path=output_path)
+
+            browser.close()
+
+        print(f"✅ 卡片已导出为图片: {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"❌ 导出图片失败: {e}")
+        print(f"💡 提示: 请使用浏览器打开生成的HTML文件，然后点击'导出图片'按钮")
+        return False
+
+    finally:
+        # 删除临时文件
+        Path(temp_html_path).unlink(missing_ok=True)
+
+
+def generate_html_preview(file_path, output_path, share_url=None, include_article=False):
+    """生成独立的HTML预览文件"""
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+        print(f"❌ 文件不存在: {file_path}")
+        return False
+
+    # 读取文章内容
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 提取信息
+    title = extract_title(content)
+    summary = extract_summary(content)
+    key_points = extract_key_points(content)
+    tags = extract_tags(content)
+
+    if not share_url:
+        share_url = "https://your-book-url.com"
+
+    # 转换文章内容为HTML（可选）
+    article_html = ""
+    if include_article:
+        article_html = convert_markdown_to_html(content)
+
+    # 生成完整HTML页面
+    html_content = generate_full_html_page(title, summary, key_points, tags, share_url, article_html)
+
+    # 写入文件
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    print(f"✅ HTML预览文件已生成: {output_path}")
+    print()
+    print(f"📌 标题: {title}")
+    print(f"📝 摘要: {summary[:50]}...")
+    print(f"💡 核心要点: {len(key_points)} 条")
+    print(f"🏷️  标签: {', '.join(tags)}")
+    print()
+    print(f"💡 请在浏览器中打开该文件查看效果并导出图片")
+    print(f"   open {output_path}")
+    print()
+
+    return True
 
 
 def generate_share_card_html(title, summary, key_points, tags, share_url):
@@ -665,29 +915,54 @@ def main():
   # 预览卡片内容（不写入文件）
   python generate_share_card.py --input chapter01.md --preview
 
+  # 生成独立的HTML预览文件（推荐）
+  python generate_share_card.py --input chapter01.md --html-output card.html
+
+  # 生成包含文章内容的HTML预览
+  python generate_share_card.py --input chapter01.md --html-output card.html --include-article
+
+  # 导出卡片为PNG图片（需要Playwright）
+  python generate_share_card.py --input chapter01.md --export-image card.png
+
   # 更新已有卡片的分享链接
   python generate_share_card.py --input chapter01.md --share-url "https://example.com" --update
 
 功能说明:
   - 复制链接：点击按钮复制文章链接到剪贴板
-  - 导出图片：使用系统截图工具或安装 html2canvas 库
+  - 导出图片：在浏览器中点击按钮导出，或使用--export-image直接生成图片
         '''
     )
 
     parser.add_argument('--input', required=True, help='文章文件路径')
     parser.add_argument('--share-url', help='分享链接（可选，默认使用占位符）')
     parser.add_argument('--preview', action='store_true', help='预览卡片内容（不写入文件）')
+    parser.add_argument('--html-output', help='生成独立的HTML预览文件')
+    parser.add_argument('--include-article', action='store_true', help='HTML预览中包含文章内容')
+    parser.add_argument('--export-image', help='将卡片导出为PNG图片（需要Playwright）')
     parser.add_argument('--update', action='store_true', help='更新已有卡片的分享链接')
 
     args = parser.parse_args()
 
+    # 导出图片模式
+    if args.export_image:
+        export_card_to_image(args.input, args.export_image, args.share_url)
+        return
+
+    # 生成HTML预览模式
+    if args.html_output:
+        generate_html_preview(args.input, args.html_output, args.share_url, args.include_article)
+        return
+
+    # 更新模式
     if args.update:
         if not args.share_url:
             print("❌ 错误: --update 模式需要提供 --share-url")
             return
         update_share_url(args.input, args.share_url)
-    else:
-        insert_share_card(args.input, args.share_url, args.preview)
+        return
+
+    # 默认：插入到文章末尾
+    insert_share_card(args.input, args.share_url, args.preview)
 
 
 if __name__ == '__main__':
